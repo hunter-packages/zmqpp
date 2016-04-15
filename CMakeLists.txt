@@ -101,6 +101,7 @@ set( LIBZMQPP_SOURCES
 # Staticlib
 if (ZMQPP_BUILD_STATIC)
   add_library( zmqpp-static STATIC ${LIBZMQPP_SOURCES})
+  target_compile_definitions(zmqpp-static PUBLIC -DZMQ_STATIC)
   target_link_libraries(zmqpp-static ZeroMQ::libzmq-static)
   list( APPEND INSTALL_TARGET_LIST zmqpp-static)
   set( LIB_TO_LINK_TO_EXAMPLES zmqpp-static )
