@@ -24,12 +24,6 @@ enable_testing()
 
 hunter_add_package(ZeroMQ)
 find_package(ZeroMQ CONFIG REQUIRED)
-if(NOT MSVC)
-  string(REGEX MATCH "-std=c[+][+]11" CXX11_PRESENTED "${CMAKE_CXX_FLAGS}")
-  if(NOT CXX11_PRESENTED)
-    message(FATAL_ERROR "C++11 required for building ${PROJECT_NAME}")
-  endif()
-endif()
 
 # Set a consistent MACOSX_RPATH default across all CMake versions.  When CMake
 # 2.8.12 is required, change this default to 1.  When CMake 3.0.0 is required,
