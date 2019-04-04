@@ -11,11 +11,16 @@
 #
 
 
-cmake_minimum_required(VERSION 2.8.12)
-enable_testing()
+cmake_minimum_required(VERSION 3.0)
 
-# prepare C++11
-set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
+include("cmake/HunterGate.cmake")
+HunterGate(
+  URL "https://github.com/ruslo/hunter/archive/v0.23.142.tar.gz"
+  SHA1 "1d841ca74150c92054896a7f6d88a123dd9e615d"
+)
+
+project(ZMQPP VERSION 4.2.0)
+enable_testing()
 
 # show all warnings
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -pedantic")
@@ -25,6 +30,8 @@ if(NOT MSVC)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
 endif()
 
+hunter_add_package(ZeroMQ)
+find_package(ZeroMQ CONFIG REQUIRED)
 
 # Set a consistent MACOSX_RPATH default across all CMake versions.  When CMake
 # 2.8.12 is required, change this default to 1.  When CMake 3.0.0 is required,
@@ -35,16 +42,12 @@ if(NOT DEFINED CMAKE_MACOSX_RPATH)
   set(CMAKE_MACOSX_RPATH 0)
 endif()
 
-# If libzmq is build in the same cmake global project and we want to
-# depends on it instead of searching for libzmq in the system, we set this to true
-set( ZMQPP_LIBZMQ_CMAKE   false   CACHE BOOL "libzmq is build through cmake too" )
-
-
 set( ZMQPP_BUILD_STATIC   true   CACHE BOOL "Build the ZMQPP static library" )
 set( ZMQPP_BUILD_SHARED   true   CACHE BOOL "Build the ZMQPP dynamic library" )
 
 set( ZMQPP_BUILD_EXAMPLES false   CACHE BOOL "Build the ZMQPP examples" )
 set( ZMQPP_BUILD_CLIENT   false   CACHE BOOL "Build the ZMQPP client" )
+# never switch on it won't be installed.
 set( ZMQPP_BUILD_TESTS    false   CACHE BOOL "Build the ZMQPP tests" )
 
 
@@ -61,10 +64,6 @@ set( ZEROMQ_INCLUDE_DIR   ""      CACHE PATH "The include directory for ZMQ" )
 
 # Build flags
 set( IS_TRAVIS_CI_BUILD   true    CACHE bool "Defines TRAVIS_CI_BUILD - Should the tests avoid running cases where memory is scarce." )
-
-# Find zmq.h and add its dir to the includes
-find_path(ZEROMQ_INCLUDE zmq.h PATHS ${ZEROMQ_INCLUDE_DIR})
-include_directories(${ZEROMQ_INCLUDE_DIR} ${ZEROMQ_INCLUDE} ${CMAKE_CURRENT_SOURCE_DIR}/src )
 
 # Do not run some tests when building on travis-ci (this cause oom error and kill the test
 # process)
@@ -107,19 +106,8 @@ set( LIBZMQPP_SOURCES
 # Staticlib
 if (ZMQPP_BUILD_STATIC)
   add_library( zmqpp-static STATIC ${LIBZMQPP_SOURCES})
-  target_compile_definitions(zmqpp-static PUBLIC ZMQ_STATIC ZMQPP_STATIC_DEFINE)
-  if (NOT ZMQPP_LIBZMQ_CMAKE)
-    find_library(ZEROMQ_LIBRARY_STATIC ${ZMQPP_LIBZMQ_NAME_STATIC} PATHS ${ZEROMQ_LIB_DIR})
-    if (NOT ZEROMQ_LIBRARY_STATIC)
-      # If libzmq was not installed through CMake, the static binary is libzmq.a not libzmq-static.a
-      find_library(ZEROMQ_LIBRARY_STATIC libzmq.a PATHS ${ZEROMQ_LIB_DIR})
-    endif()
-    target_link_libraries( zmqpp-static ${ZEROMQ_LIBRARY_STATIC})
-  else()
-    # libzmq-static is the name of the target from
-    # libzmq's CMake
-    target_link_libraries(zmqpp-static libzmq-static)
-  endif()
+  target_compile_definitions(zmqpp-static PUBLIC -DZMQ_STATIC)
+  target_link_libraries(zmqpp-static ZeroMQ::libzmq-static)
   list( APPEND INSTALL_TARGET_LIST zmqpp-static)
   set( LIB_TO_LINK_TO_EXAMPLES zmqpp-static )
 endif() # ZMQPP_BUILD_STATIC
@@ -127,17 +115,19 @@ endif() # ZMQPP_BUILD_STATIC
 # Shared lib
 if (ZMQPP_BUILD_SHARED)
   add_library( zmqpp SHARED ${LIBZMQPP_SOURCES})
-  if (NOT ZMQPP_LIBZMQ_CMAKE)
-    find_library(ZEROMQ_LIBRARY_SHARED ${ZMQPP_LIBZMQ_NAME_SHARED} PATHS ${ZEROMQ_LIB_DIR})
-    target_link_libraries( zmqpp ${ZEROMQ_LIBRARY_SHARED} )
-  else()
-    # libzmq is the name of the target from
-    # libzmq's CMake
-    target_link_libraries(zmqpp libzmq)
-  endif()
+
+  target_link_libraries(zmqpp ZeroMQ::libzmq)
+
   list( APPEND INSTALL_TARGET_LIST zmqpp)
   set( LIB_TO_LINK_TO_EXAMPLES zmqpp )
 endif() # ZMQPP_BUILD_SHARED
+
+if ((ZMQPP_BUILD_CLIENT) OR (ZMQPP_BUILD_EXAMPLES) OR (ZMQPP_BUILD_TESTS))
+  hunter_add_package(Boost COMPONENTS program_options thread system test)
+  find_package(Boost CONFIG REQUIRED program_options thread system unit_test_framework)
+
+  include_directories("${CMAKE_CURRENT_SOURCE_DIR}/src")
+endif()
 
 # We need to link zmqpp to ws2_32 on windows for the implementation of winsock2.h
 if(WIN32)
@@ -176,14 +166,7 @@ endif()
 # ------
 
 if( ZMQPP_BUILD_CLIENT )
-  # Boost
-  # -----
-  set(Boost_USE_STATIC_LIBS ON)
-  set(Boost_USE_MULTITHREADED ON)
-  set(Boost_USE_STATIC_RUNTIME OFF)
-  find_package(Boost REQUIRED COMPONENTS program_options )
-  include_directories( ${Boost_INCLUDE_DIRS} )
-
+  include_directories("${CMAKE_CURRENT_SOURCE_DIR}/src")
   add_executable( zmqpp-client
     src/client/main.cpp
     src/client/options.cpp
@@ -196,15 +179,6 @@ endif()
 # -----
 
 if( ZMQPP_BUILD_TESTS )
-  #
-  # Boost
-  # -----
-  set(Boost_USE_STATIC_LIBS OFF) # only find static libs
-  set(Boost_USE_MULTITHREADED ON)
-  set(Boost_USE_STATIC_RUNTIME OFF)
-  find_package(Boost REQUIRED COMPONENTS thread system unit_test_framework)
-  include_directories( ${Boost_INCLUDE_DIRS} )
-
   add_executable( zmqpp-test-runner
     src/tests/test_actor.cpp
     src/tests/test_context.cpp
@@ -222,21 +196,48 @@ if( ZMQPP_BUILD_TESTS )
     src/tests/test_auth.cpp
     src/tests/test_proxy.cpp
     )
-  target_link_libraries( zmqpp-test-runner  ${LIB_TO_LINK_TO_EXAMPLES} ${Boost_LIBRARIES})
+  target_link_libraries( zmqpp-test-runner  ${LIB_TO_LINK_TO_EXAMPLES} Boost::thread Boost::system Boost::unit_test_framework)
   add_test( zmqpp-test zmqpp-test-runner --log-level=test-suite )
 endif()
 
 
 # Install
 # -------
+set(config_install_dir "lib/cmake/${PROJECT_NAME}")
+set(config_export_name "${PROJECT_NAME}Config")
+set(targets_export_name "${PROJECT_NAME}Targets")
+set(project_config "${CMAKE_CURRENT_BINARY_DIR}/${config_export_name}.cmake")
+set(version_config "${CMAKE_CURRENT_BINARY_DIR}/${config_export_name}Version.cmake")
+set(namespace "${PROJECT_NAME}::")
+
 install(TARGETS ${INSTALL_TARGET_LIST}
+        EXPORT "${targets_export_name}"
+        INCLUDES DESTINATION include
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib)
 
 install(DIRECTORY src/zmqpp DESTINATION include/
         FILES_MATCHING PATTERN "*.hpp")
+include(CMakePackageConfigHelpers)
+configure_package_config_file( # Uses target_exports_name
+    "cmake/Config.cmake.in"
+    "${project_config}"
+    INSTALL_DESTINATION "${config_install_dir}"
+)
+write_basic_package_version_file(
+  "${version_config}" COMPATIBILITY SameMajorVersion)
+
+install(
+  EXPORT "${targets_export_name}"
+  NAMESPACE "${namespace}"
+  DESTINATION "${config_install_dir}")
+
+ install(
+   FILES "${project_config}" "${version_config}"
+   DESTINATION "${config_install_dir}")
 
 install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/zmqpp_export.h"
         DESTINATION "include")
+
