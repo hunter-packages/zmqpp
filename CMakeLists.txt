@@ -15,8 +15,8 @@ cmake_minimum_required(VERSION 3.0)
 
 include("cmake/HunterGate.cmake")
 HunterGate(
-  URL "https://github.com/ruslo/hunter/archive/v0.14.0.tar.gz"
-  SHA1 "f10609f4be3c5840de53545c1b0d8cfa642fb744"
+  URL "https://github.com/ruslo/hunter/archive/v0.23.142.tar.gz"
+  SHA1 "1d841ca74150c92054896a7f6d88a123dd9e615d"
 )
 
 project(ZMQPP VERSION 4.2.0)
